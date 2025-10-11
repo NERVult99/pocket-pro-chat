@@ -45,7 +45,15 @@ const Transactions = () => {
   const [vendor, setVendor] = useState("");
   const [description, setDescription] = useState("");
 
-  const categories = ["groceries", "dining", "transportation", "entertainment", "utilities", "shopping", "other"];
+  const categories = [
+    "Essentials", 
+    "Food & Dining", 
+    "Lifestyle & Entertainment", 
+    "Healthcare", 
+    "Savings & Investments",
+    "Debt Repayment (EMI)",
+    "Monthly Rent"
+  ];
 
   useEffect(() => {
     checkAuthAndLoad();

@@ -14,7 +14,8 @@ import {
   LogOut,
   Settings,
   Receipt,
-  PieChart
+  PieChart,
+  AlertCircle
 } from "lucide-react";
 
 interface Budget {
@@ -248,6 +249,28 @@ const Dashboard = () => {
             </div>
           </CardHeader>
           <CardContent>
+            {/* AI Recommendation Alert */}
+            {profile?.budget_recommendation_message && profile?.budget_recommendation_type && (
+              <div className={`mb-6 p-4 rounded-lg flex items-start gap-3 ${
+                profile.budget_recommendation_type === 'success' ? 'bg-green-50 border border-green-200 dark:bg-green-950/30' :
+                profile.budget_recommendation_type === 'warning' ? 'bg-yellow-50 border border-yellow-200 dark:bg-yellow-950/30' :
+                'bg-red-50 border border-red-200 dark:bg-red-950/30'
+              }`}>
+                <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                  profile.budget_recommendation_type === 'success' ? 'text-green-600' :
+                  profile.budget_recommendation_type === 'warning' ? 'text-yellow-600' :
+                  'text-red-600'
+                }`} />
+                <p className={`text-sm font-medium ${
+                  profile.budget_recommendation_type === 'success' ? 'text-green-800 dark:text-green-300' :
+                  profile.budget_recommendation_type === 'warning' ? 'text-yellow-800 dark:text-yellow-300' :
+                  'text-red-800 dark:text-red-300'
+                }`}>
+                  {profile.budget_recommendation_message}
+                </p>
+              </div>
+            )}
+            
             {budgets.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <p className="mb-4">No budgets set up yet</p>
