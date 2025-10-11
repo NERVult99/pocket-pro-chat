@@ -65,8 +65,8 @@ const Index = () => {
         <div className="container mx-auto px-4 py-20 relative">
           <div className="max-w-4xl mx-auto text-center space-y-8">
             <div className="flex items-center justify-center gap-3 mb-6">
-              <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-                <Wallet className="w-8 h-8" />
+              <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center overflow-hidden">
+                <img src="/mon.jpg" alt="Budget Buddy" className="w-full h-full object-cover" />
               </div>
               <h1 className="text-3xl font-bold">Budget Buddy</h1>
             </div>

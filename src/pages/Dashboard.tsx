@@ -45,7 +45,17 @@ const Dashboard = () => {
     checkUser();
   }, []);
 
-  const checkUser = async () => {
+  useEffect(() => {
+    // Refresh data when component becomes visible (user returns from budget setup)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkUser();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);  const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     
     if (!session) {
