@@ -22,6 +22,7 @@ interface Budget {
   category: string;
   allocated_amount: number;
   spent_amount: number;
+  recommendation?: string;
 }
 
 interface Transaction {
@@ -252,11 +253,16 @@ const Dashboard = () => {
                   return (
                     <div key={budget.id} className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium capitalize">{budget.category}</p>
                           <p className="text-sm text-muted-foreground">
                             ₹{Number(budget.spent_amount).toLocaleString()} / ₹{Number(budget.allocated_amount).toLocaleString()}
                           </p>
+                          {budget.recommendation && (
+                            <p className="text-xs text-primary mt-1 italic">
+                              💡 {budget.recommendation}
+                            </p>
+                          )}
                         </div>
                         <span className={`text-sm font-semibold ${
                           status === 'destructive' ? 'text-destructive' : 
