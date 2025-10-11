@@ -1,190 +1,185 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Loader2, Database } from 'lucide-react';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+// AI chat hook integrated with your Supabase + Lovable finance API
+const useFinanceChat = () => {
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      content:
+        'Hello! I am your finance assistant. I can help you with budgets, expenses, savings, and investments.',
+      sources: null,
+    },
+  ]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const sendMessage = async (question) => {
+    if (!question.trim()) return;
+
+    const userMessage = { role: 'user', content: question };
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+
+    try {
+      const LOVABLE_API_KEY = import.meta.env.VITE_LOVABLE_API_KEY;
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      // Example: get user token from local storage or cookie
+      const authToken = localStorage.getItem('supabase-auth-token');
+
+      const response = await fetch('/api/finance-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authToken || '',
+        },
+        body: JSON.stringify({
+          messages: [userMessage],
+          type: 'budget_analysis', // optional for special tools
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch AI response');
+
+      const data = await response.json();
+      const assistantMessage = {
+        role: 'assistant',
+        content: data.message,
+        sources: data.sources || null, // optional for data sources
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: `Error: ${error.message}`, sources: null },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { messages, isLoading, sendMessage };
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+export default function AIChat() {
+  const [input, setInput] = useState('');
+  const { messages, isLoading, sendMessage } = useFinanceChat();
+  const messagesEndRef = useRef(null);
 
-  try {
-    const { messages, type = "general" } = await req.json();
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-    // --- FINANCE-ONLY FILTER: Improved ---
-    const userText = messages?.[messages.length - 1]?.content?.toLowerCase().trim() || "";
-    const financeKeywords = [
-      "budget", "expense", "income", "savings", "transaction", "financial", "investment",
-      "spend", "cost", "revenue", "bill", "bank", "loan", "debt", "salary", "profit", "loss",
-      "account", "credit", "debit", "tax", "interest", "emi", "mutual fund", "stock", "insurance",
-      "wallet", "payment", "withdraw", "deposit", "transfer", "balance", "statement"
-    ];
-    const isFinance = financeKeywords.some((kw) => userText.includes(kw));
-    if (!isFinance || userText.length < 5) {
-      return new Response(
-        JSON.stringify({ message: "Sorry, I can only answer finance-related questions. Please ask about budgets, expenses, savings, investments, or other financial topics." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSubmit = () => {
+    if (!input.trim() || isLoading) return;
+    sendMessage(input);
+    setInput('');
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
     }
-    // --- FILTER END ---
+  };
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+  return (
+    <div className="flex flex-col h-screen max-w-4xl mx-auto bg-gradient-to-br from-slate-900 to-slate-800">
+      {/* Header */}
+      <div className="bg-slate-800 border-b border-slate-700 px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <Database className="w-6 h-6 text-blue-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white">AI Finance Assistant</h1>
+            <p className="text-sm text-slate-400">Ask questions about your finances</p>
+          </div>
+        </div>
+      </div>
 
-    // Get user authentication
-    const authHeader = req.headers.get("authorization");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader! } },
-    });
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        {messages.map((message, index) => (
+          <div
+            key={index}
+            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                message.role === 'user'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-slate-100'
+              }`}
+            >
+              <p className="text-sm leading-relaxed">{message.content}</p>
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
+              {message.sources && (
+                <div className="mt-3 pt-3 border-t border-slate-600">
+                  <p className="text-xs text-slate-400 mb-2">Data sources:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {message.sources.map((source, idx) => (
+                      <span key={idx} className="text-xs bg-slate-600 px-2 py-1 rounded">
+                        {source.table}: {source.count} records
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
 
-    // Fetch user's financial data
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-slate-700 rounded-2xl px-4 py-3">
+              <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+            </div>
+          </div>
+        )}
 
-    const { data: recentTransactions } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("transaction_date", { ascending: false })
-      .limit(10);
+        <div ref={messagesEndRef} />
+      </div>
 
-    const { data: budgets } = await supabase
-      .from("budgets")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(5);
+      {/* Input */}
+      <div className="bg-slate-800 border-t border-slate-700 px-6 py-4">
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask about your finances..."
+            disabled={isLoading}
+            className="flex-1 bg-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-400 disabled:opacity-50"
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={isLoading || !input.trim()}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-xl px-6 py-3 flex items-center gap-2 transition-colors"
+          >
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <Send className="w-5 h-5" />
+                <span className="hidden sm:inline">Send</span>
+              </>
+            )}
+          </button>
+        </div>
 
-    // Finance-focused system prompt
-    const systemPrompt = `You are a personal finance assistant specialized in budgeting and expense management.
+        <p className="text-xs text-slate-500 mt-2 text-center">
+          AI responses are based on your financial data
+        </p>
+      </div>
+    </div>
+  );
+}
 
-USER FINANCIAL PROFILE:
-- Name: ${profile?.full_name || "User"}
-- Monthly Income: ₹${profile?.monthly_income || "Not set"}
-- Savings Goal: ₹${profile?.savings_goal || "Not set"}
-
-RECENT TRANSACTIONS:
-${recentTransactions?.map(t => `- ${t.category}: ₹${t.amount} at ${t.vendor || "unknown"}`).join("\n") || "No recent transactions"}
-
-ACTIVE BUDGETS:
-${budgets?.map(b => `- ${b.category}: ₹${b.spent_amount}/₹${b.allocated_amount} (${((b.spent_amount/b.allocated_amount)*100).toFixed(1)}% used)`).join("\n") || "No budgets set"}
-
-YOUR CAPABILITIES:
-1. **Expense Tracking**: Help categorize and monitor spending
-2. **Budget Management**: Track budget usage and provide alerts
-3. **Financial Analysis**: Analyze spending patterns and trends  
-4. **Savings Optimization**: Recommend ways to reduce expenses
-5. **Goal Tracking**: Monitor progress toward financial objectives
-
-RESPONSE STYLE:
-- Focus exclusively on financial advice and budget management
-- Provide specific monetary amounts and percentages
-- Alert when approaching or exceeding budget limits
-- Suggest actionable financial improvements
-- Use data-driven insights from user's actual financial data
-
-Keep responses concise, relevant, and financially focused.`;
-
-    const body = {
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages
-      ],
-    };
-
-    // Add budget analysis tools for structured financial responses
-    if (type === "budget_analysis") {
-      body.tools = [{
-        type: "function",
-        function: {
-          name: "analyze_budget",
-          description: "Analyze current budget status and spending patterns",
-          parameters: {
-            type: "object",
-            properties: {
-              category: { type: "string" },
-              spent_amount: { type: "number" },
-              budget_limit: { type: "number" },
-              percentage_used: { type: "number" },
-              status: { type: "string", enum: ["on_track", "warning", "exceeded"] },
-              recommendation: { type: "string" }
-            }
-          }
-        }
-      }];
-    }
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ 
-          error: "Rate limit exceeded. Please try again later." 
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ 
-          error: "Payment required. Please add credits." 
-        }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
-      throw new Error("AI gateway error");
-    }
-
-    const data = await response.json();
-    const assistantMessage = data.choices[0].message.content;
-
-    // Save financial conversation to database
-    await supabase.from("chat_messages").insert([
-      {
-        user_id: user.id,
-        role: "user",
-        content: messages[messages.length - 1].content
-      },
-      {
-        user_id: user.id,
-        role: "assistant",
-        content: assistantMessage
-      }
-    ]);
-
-    return new Response(JSON.stringify({ message: assistantMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
-  } catch (error) {
-    console.error("Finance chat error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Financial service error";
-    
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
