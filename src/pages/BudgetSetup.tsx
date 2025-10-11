@@ -108,6 +108,9 @@ const BudgetSetup = () => {
 
         if (error) throw error;
 
+        // Generate AI recommendations for each budget
+        await generateBudgetRecommendations(budgetData);
+
         toast.success("Budgets saved successfully!");
         navigate("/dashboard");
       } else {
@@ -118,6 +121,62 @@ const BudgetSetup = () => {
       toast.error("Failed to save budgets");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateBudgetRecommendations = async (budgetData: Array<{
+    user_id: string;
+    month: string;
+    category: string;
+    allocated_amount: number;
+    spent_amount: number;
+  }>) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Get profile data for context
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      const currentMonth = new Date().toISOString().slice(0, 7);
+
+      // Request AI recommendations for each category
+      for (const budget of budgetData) {
+        const prompt = `Analyze this budget category and provide a brief recommendation (max 100 characters):
+Category: ${budget.category}
+Monthly Budget: ₹${budget.allocated_amount}
+Monthly Income: ₹${profileData?.monthly_income || "Not set"}
+Transport Mode: ${profileData?.transport_mode || "Not set"}
+
+Provide a concise, actionable tip for optimizing this budget category.`;
+
+        const response = await supabase.functions.invoke("chat", {
+          body: {
+            messages: [{ role: "user", content: prompt }],
+            type: "budget_analysis"
+          },
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+        });
+
+        if (response.data?.message) {
+          // Update the budget with the recommendation
+          await supabase
+            .from("budgets")
+            .update({ recommendation: response.data.message })
+            .eq("user_id", userId)
+            .eq("month", currentMonth)
+            .eq("category", budget.category);
+        }
+      }
+    } catch (error) {
+      console.error("Error generating recommendations:", error);
+      // Don't throw error - recommendations are optional
     }
   };
 
