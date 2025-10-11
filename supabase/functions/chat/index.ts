@@ -13,10 +13,28 @@ serve(async (req) => {
 
   try {
     const { messages, type = "general" } = await req.json();
+
+    // --- FINANCE-ONLY FILTER: Improved ---
+    const userText = messages?.[messages.length - 1]?.content?.toLowerCase().trim() || "";
+    const financeKeywords = [
+      "budget", "expense", "income", "savings", "transaction", "financial", "investment",
+      "spend", "cost", "revenue", "bill", "bank", "loan", "debt", "salary", "profit", "loss",
+      "account", "credit", "debit", "tax", "interest", "emi", "mutual fund", "stock", "insurance",
+      "wallet", "payment", "withdraw", "deposit", "transfer", "balance", "statement"
+    ];
+    const isFinance = financeKeywords.some((kw) => userText.includes(kw));
+    if (!isFinance || userText.length < 5) {
+      return new Response(
+        JSON.stringify({ message: "Sorry, I can only answer finance-related questions. Please ask about budgets, expenses, savings, investments, or other financial topics." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    // --- FILTER END ---
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Get user from auth header
+    // Get user authentication
     const authHeader = req.headers.get("authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -27,7 +45,7 @@ serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    // Get user profile and recent context
+    // Fetch user's financial data
     const { data: profile } = await supabase
       .from("profiles")
       .select("*")
@@ -48,63 +66,37 @@ serve(async (req) => {
       .order("created_at", { ascending: false })
       .limit(5);
 
-    // Build context-aware system prompt
-    const systemPrompt = `You are a proactive financial advisor and budgeting assistant. 
+    // Finance-focused system prompt
+    const systemPrompt = `You are a personal finance assistant specialized in budgeting and expense management.
 
-USER CONTEXT:
+USER FINANCIAL PROFILE:
 - Name: ${profile?.full_name || "User"}
 - Monthly Income: ₹${profile?.monthly_income || "Not set"}
 - Savings Goal: ₹${profile?.savings_goal || "Not set"}
-- Transport: ${profile?.transport_mode || "Not set"}
-- Dietary Restrictions: ${profile?.dietary_restrictions?.join(", ") || "None"}
 
-RECENT SPENDING:
+RECENT TRANSACTIONS:
 ${recentTransactions?.map(t => `- ${t.category}: ₹${t.amount} at ${t.vendor || "unknown"}`).join("\n") || "No recent transactions"}
 
-CURRENT BUDGETS:
-${budgets?.map(b => `- ${b.category}: ₹${b.spent_amount}/₹${b.allocated_amount}`).join("\n") || "No budgets set"}
+ACTIVE BUDGETS:
+${budgets?.map(b => `- ${b.category}: ₹${b.spent_amount}/₹${b.allocated_amount} (${((b.spent_amount/b.allocated_amount)*100).toFixed(1)}% used)`).join("\n") || "No budgets set"}
 
 YOUR CAPABILITIES:
-1. **Price Comparison**: Compare prices across vendors (groceries, restaurants, products)
-2. **Opportunity Cost Analysis**: Show what savings could mean (e.g., "This coffee = 2 meals")
-3. **Budget Tracking**: Monitor spending and alert on overspending
-4. **Smart Recommendations**: Suggest cheaper alternatives and best deals
-5. **Predictive Insights**: Warn about potential budget issues
-
-MOCK PRICE DATA (use for comparisons):
-Groceries:
-- BigBasket: Milk ₹60, Bread ₹40, Rice (5kg) ₹350, Eggs ₹80
-- Amazon Fresh: Milk ₹65, Bread ₹38, Rice (5kg) ₹340, Eggs ₹75
-- Local Store: Milk ₹55, Bread ₹35, Rice (5kg) ₹380, Eggs ₹70
-
-Restaurants:
-- Swiggy: Biryani ₹250, Pizza ₹400, Burger ₹180, Delivery ₹40
-- Zomato: Biryani ₹230, Pizza ₹420, Burger ₹170, Delivery ₹35
-- Direct Order: Biryani ₹220, Pizza ₹380, Burger ₹160, No delivery
-
-Transportation:
-- Uber: 5km = ₹120, 10km = ₹200
-- Ola: 5km = ₹110, 10km = ₹180
-- Metro: 5km = ₹20, 10km = ₹30
+1. **Expense Tracking**: Help categorize and monitor spending
+2. **Budget Management**: Track budget usage and provide alerts
+3. **Financial Analysis**: Analyze spending patterns and trends  
+4. **Savings Optimization**: Recommend ways to reduce expenses
+5. **Goal Tracking**: Monitor progress toward financial objectives
 
 RESPONSE STYLE:
-- Be friendly, proactive, and financially savvy
-- Use emojis appropriately (💰 💵 📊 📈 🎯)
-- Provide concrete numbers and comparisons
-- Show opportunity costs visually
-- Suggest actionable alternatives
-- Format responses with clear sections
+- Focus exclusively on financial advice and budget management
+- Provide specific monetary amounts and percentages
+- Alert when approaching or exceeding budget limits
+- Suggest actionable financial improvements
+- Use data-driven insights from user's actual financial data
 
-When comparing prices:
-1. Show all options with prices
-2. Highlight the cheapest
-3. Calculate potential savings
-4. Show what that saving means (opportunity cost)
-5. Factor in distance/convenience
+Keep responses concise, relevant, and financially focused.`;
 
-Be conversational but data-driven!`;
-
-    const body: any = {
+    const body = {
       model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
@@ -112,38 +104,26 @@ Be conversational but data-driven!`;
       ],
     };
 
-    // Add tool calling for structured responses if needed
-    if (type === "price_comparison") {
-      body.tools = [
-        {
-          type: "function",
-          function: {
-            name: "compare_prices",
-            description: "Compare prices across vendors for a product or service",
-            parameters: {
-              type: "object",
-              properties: {
-                item: { type: "string" },
-                vendors: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      name: { type: "string" },
-                      price: { type: "number" },
-                      distance: { type: "string" },
-                      rating: { type: "number" }
-                    }
-                  }
-                },
-                cheapest: { type: "string" },
-                savings: { type: "number" },
-                opportunity_cost: { type: "string" }
-              }
+    // Add budget analysis tools for structured financial responses
+    if (type === "budget_analysis") {
+      body.tools = [{
+        type: "function",
+        function: {
+          name: "analyze_budget",
+          description: "Analyze current budget status and spending patterns",
+          parameters: {
+            type: "object",
+            properties: {
+              category: { type: "string" },
+              spent_amount: { type: "number" },
+              budget_limit: { type: "number" },
+              percentage_used: { type: "number" },
+              status: { type: "string", enum: ["on_track", "warning", "exceeded"] },
+              recommendation: { type: "string" }
             }
           }
         }
-      ];
+      }];
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -157,37 +137,51 @@ Be conversational but data-driven!`;
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+        return new Response(JSON.stringify({ 
+          error: "Rate limit exceeded. Please try again later." 
+        }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits." }), {
+        return new Response(JSON.stringify({ 
+          error: "Payment required. Please add credits." 
+        }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      
       throw new Error("AI gateway error");
     }
 
     const data = await response.json();
     const assistantMessage = data.choices[0].message.content;
 
-    // Save messages to database
+    // Save financial conversation to database
     await supabase.from("chat_messages").insert([
-      { user_id: user.id, role: "user", content: messages[messages.length - 1].content },
-      { user_id: user.id, role: "assistant", content: assistantMessage }
+      {
+        user_id: user.id,
+        role: "user",
+        content: messages[messages.length - 1].content
+      },
+      {
+        user_id: user.id,
+        role: "assistant",
+        content: assistantMessage
+      }
     ]);
 
     return new Response(JSON.stringify({ message: assistantMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (error) {
-    console.error("Chat error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    console.error("Finance chat error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Financial service error";
+    
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
