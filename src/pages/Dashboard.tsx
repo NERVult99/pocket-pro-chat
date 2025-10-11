@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { 
   Wallet, 
@@ -15,8 +16,11 @@ import {
   Settings,
   Receipt,
   PieChart,
-  AlertCircle
+  AlertCircle,
+  FileText
 } from "lucide-react";
+import PieChartView from "@/components/PieChartView";
+import CSVExport from "@/components/CSVExport";
 
 interface Budget {
   id: string;
@@ -95,7 +99,17 @@ const Dashboard = () => {
       }
 
       // Load recent transactions
-      const { data: transactionData } = await supabase
+  const handlePieChart = () => {
+    // Add your pie chart functionality here
+    
+    
+  };
+
+  const handleCSVExport = () => {
+    // Add your CSV export functionality here
+  };      
+  
+  const { data: transactionData } = await supabase
         .from("transactions")
         .select("*")
         .eq("user_id", userId)
@@ -168,6 +182,32 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <PieChart className="w-5 h-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Budget Chart</DialogTitle>
+                </DialogHeader>
+                <PieChartView />
+              </DialogContent>
+            </Dialog>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <FileText className="w-5 h-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Export Data</DialogTitle>
+                </DialogHeader>
+                <CSVExport />
+              </DialogContent>
+            </Dialog>
             <Button variant="ghost" size="icon" onClick={() => navigate("/chat")}>
               <MessageCircle className="w-5 h-5" />
             </Button>
