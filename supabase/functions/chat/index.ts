@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')!;
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -89,27 +89,35 @@ Transportation:
 
 Provide personalized advice based on their budget, spending patterns, and preferences. Be conversational, helpful, and focus on actionable savings opportunities.`;
 
-    const aiResponse = await fetch('https://api.lovable.app/v1/ai-gateway/chat', {
+    const geminiPrompt = `${systemPrompt}\n\nUser question: ${message}`;
+
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${lovableApiKey}`,
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: geminiPrompt }]
+          }
         ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+        }
       }),
     });
 
     if (!aiResponse.ok) {
-      throw new Error('AI Gateway request failed');
+      const errorText = await aiResponse.text();
+      console.error('Gemini API error:', errorText);
+      throw new Error('Gemini API request failed');
     }
 
     const aiData = await aiResponse.json();
-    const assistantMessage = aiData.choices[0]?.message?.content || 'I apologize, I could not generate a response.';
+    const assistantMessage = aiData.candidates?.[0]?.content?.parts?.[0]?.text || 'I apologize, I could not generate a response.';
 
     await supabase.from('chat_messages').insert([
       { user_id: user.id, role: 'user', content: message },
