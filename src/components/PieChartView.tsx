@@ -132,26 +132,27 @@ const PieChartView = () => {
   };
 
   const renderLabel = (entry: any) => {
+    if (entry.value < 5) return ''; // Hide labels for small slices
     return `${entry.value}%`;
   };
 
   if (loading) {
     return (
-      <div className="h-full overflow-y-auto space-y-4 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card className="w-full h-96">
+      <div className="h-full space-y-6 p-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="w-full">
             <CardHeader>
               <CardTitle>Current Month Distribution</CardTitle>
             </CardHeader>
-            <CardContent className="flex items-center justify-center h-64">
+            <CardContent className="flex items-center justify-center h-80">
               <div className="text-center">Loading...</div>
             </CardContent>
           </Card>
-          <Card className="w-full h-96">
+          <Card className="w-full">
             <CardHeader>
               <CardTitle>Previous Month Distribution</CardTitle>
             </CardHeader>
-            <CardContent className="flex items-center justify-center h-64">
+            <CardContent className="flex items-center justify-center h-80">
               <div className="text-center">Loading...</div>
             </CardContent>
           </Card>
@@ -161,9 +162,9 @@ const PieChartView = () => {
   }
 
   return (
-    <div className="h-full overflow-y-auto space-y-4 p-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="w-full h-96">
+    <div className="h-full space-y-6 p-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="w-full">
           <CardHeader>
             <CardTitle>Current Month Spending</CardTitle>
           </CardHeader>
@@ -173,15 +174,15 @@ const PieChartView = () => {
                 <div className="text-center text-muted-foreground">No spending data available</div>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={350}>
                 <PieChart>
                   <Pie
                     data={data}
                     cx="50%"
-                    cy="50%"
+                    cy="45%"
                     labelLine={false}
                     label={renderLabel}
-                    outerRadius={80}
+                    outerRadius={90}
                     fill="#8884d8"
                     dataKey="value"
                   >
@@ -189,28 +190,35 @@ const PieChartView = () => {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value, name, props) => [`${value}% (₹${props.payload.amount})`, name]} />
-                  <Legend />
+                  <Tooltip 
+                    formatter={(value, name, props) => [`${value}% (₹${props.payload.amount})`, name]} 
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
+                  />
+                  <Legend 
+                    verticalAlign="bottom" 
+                    height={60}
+                    wrapperStyle={{ paddingTop: '20px' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
 
-        <Card className="w-full h-96">
+        <Card className="w-full">
           <CardHeader>
             <CardTitle>Previous Month (Sep 2025)</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={350}>
               <PieChart>
                 <Pie
                   data={previousMonthData}
                   cx="50%"
-                  cy="50%"
+                  cy="45%"
                   labelLine={false}
                   label={renderLabel}
-                  outerRadius={80}
+                  outerRadius={90}
                   fill="#8884d8"
                   dataKey="value"
                 >
@@ -218,16 +226,23 @@ const PieChartView = () => {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value, name, props) => [`${value}% (₹${props.payload.amount})`, name]} />
-                <Legend />
+                <Tooltip 
+                  formatter={(value, name, props) => [`${value}% (₹${props.payload.amount})`, name]} 
+                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
+                />
+                <Legend 
+                  verticalAlign="bottom" 
+                  height={60}
+                  wrapperStyle={{ paddingTop: '20px' }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="w-full h-96">
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="w-full">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle>Multi-Month Expense Comparison</CardTitle>
           <Select value={monthsToCompare.toString()} onValueChange={(value) => setMonthsToCompare(Number(value))}>
             <SelectTrigger className="w-40">
@@ -243,40 +258,53 @@ const PieChartView = () => {
           </Select>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={multiMonthData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis 
-                dataKey="day" 
-                fontSize={12}
-                label={{ value: 'Day of Month', position: 'insideBottom', offset: -5 }}
-              />
-              <YAxis 
-                fontSize={12}
-                label={{ value: 'Amount (₹)', angle: -90, position: 'insideLeft' }}
-              />
-              <Tooltip 
-                formatter={(value: number) => [`₹${value.toFixed(2)}`, '']}
-                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
-              />
-              <Legend 
-                wrapperStyle={{ paddingTop: '10px' }}
-                iconType="line"
-              />
-              {getMonthLabels().map((label, idx) => (
-                <Line
-                  key={label}
-                  type="monotone"
-                  dataKey={label}
-                  stroke={monthColors[idx % monthColors.length]}
-                  strokeWidth={2}
-                  dot={false}
-                  name={label}
-                  connectNulls
+          {multiMonthData.length === 0 ? (
+            <div className="flex items-center justify-center h-80">
+              <div className="text-center text-muted-foreground">Loading expense data...</div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={multiMonthData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis 
+                  dataKey="day" 
+                  tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }}
+                  label={{ value: 'Day of Month', position: 'insideBottom', offset: -5, fill: 'hsl(var(--muted-foreground))' }}
                 />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+                <YAxis 
+                  tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }}
+                  label={{ value: 'Amount (₹)', angle: -90, position: 'insideLeft', fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <Tooltip 
+                  formatter={(value: number) => [`₹${value.toFixed(2)}`, '']}
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    borderColor: 'hsl(var(--border))',
+                    borderRadius: '8px',
+                    padding: '8px 12px'
+                  }}
+                  labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="line"
+                />
+                {getMonthLabels().map((label, idx) => (
+                  <Line
+                    key={label}
+                    type="monotone"
+                    dataKey={label}
+                    stroke={monthColors[idx % monthColors.length]}
+                    strokeWidth={3}
+                    dot={{ fill: monthColors[idx % monthColors.length], r: 3 }}
+                    activeDot={{ r: 6 }}
+                    name={label}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
     </div>

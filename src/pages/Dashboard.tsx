@@ -188,9 +188,9 @@ const Dashboard = () => {
                   <PieChart className="w-5 h-5" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Budget Chart</DialogTitle>
+                  <DialogTitle>Budget Analytics</DialogTitle>
                 </DialogHeader>
                 <PieChartView />
               </DialogContent>
