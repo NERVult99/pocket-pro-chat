@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 
 const PieChartView = () => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [monthsToCompare, setMonthsToCompare] = useState<number>(2);
+  const [multiMonthData, setMultiMonthData] = useState<any[]>([]);
 
   const colors = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658'];
+  const monthColors = ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4'];
 
   const previousMonthData = [
     { name: 'Monthly Rent', value: 15, amount: 4996, color: '#0088FE' },
@@ -35,7 +39,8 @@ const PieChartView = () => {
 
   useEffect(() => {
     fetchBudgetData();
-  }, []);
+    fetchMultiMonthData();
+  }, [monthsToCompare]);
 
   const fetchBudgetData = async () => {
     try {
@@ -66,6 +71,64 @@ const PieChartView = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchMultiMonthData = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const months: string[] = [];
+      const now = new Date();
+      for (let i = 0; i < monthsToCompare; i++) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push(date.toISOString().slice(0, 7));
+      }
+
+      const { data: transactions } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .gte("transaction_date", `${months[months.length - 1]}-01`)
+        .lte("transaction_date", `${months[0]}-31`);
+
+      if (!transactions) return;
+
+      const dailyData: any[] = [];
+      for (let day = 1; day <= 31; day++) {
+        const dayData: any = { day };
+        
+        months.forEach((month, idx) => {
+          const monthName = new Date(month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+          const dailyTotal = transactions
+            .filter(t => {
+              const tDate = new Date(t.transaction_date);
+              return tDate.getMonth() === new Date(month + '-01').getMonth() &&
+                     tDate.getFullYear() === new Date(month + '-01').getFullYear() &&
+                     tDate.getDate() === day;
+            })
+            .reduce((sum, t) => sum + Number(t.amount), 0);
+          
+          dayData[monthName] = dailyTotal;
+        });
+        
+        dailyData.push(dayData);
+      }
+
+      setMultiMonthData(dailyData);
+    } catch (error) {
+      console.error("Error fetching multi-month data:", error);
+    }
+  };
+
+  const getMonthLabels = () => {
+    const labels: string[] = [];
+    const now = new Date();
+    for (let i = 0; i < monthsToCompare; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      labels.push(date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
+    }
+    return labels;
   };
 
   const renderLabel = (entry: any) => {
@@ -163,20 +226,55 @@ const PieChartView = () => {
         </Card>
       </div>
 
-      <Card className="w-full h-80">
-        <CardHeader>
-          <CardTitle>Month-to-Month Comparison</CardTitle>
+      <Card className="w-full h-96">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Multi-Month Expense Comparison</CardTitle>
+          <Select value={monthsToCompare.toString()} onValueChange={(value) => setMonthsToCompare(Number(value))}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Compare Last" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="2">2 Months</SelectItem>
+              <SelectItem value="3">3 Months</SelectItem>
+              <SelectItem value="4">4 Months</SelectItem>
+              <SelectItem value="5">5 Months</SelectItem>
+              <SelectItem value="6">6 Months</SelectItem>
+            </SelectContent>
+          </Select>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={getComparisonData()}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="category" fontSize={12} />
-              <YAxis />
-              <Tooltip formatter={(value) => [`₹${value}`, '']} />
-              <Legend />
-              <Line type="monotone" dataKey="previous" stroke="#8884d8" strokeWidth={2} name="Previous Month" />
-              <Line type="monotone" dataKey="current" stroke="#82ca9d" strokeWidth={2} name="Current Month" />
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={multiMonthData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis 
+                dataKey="day" 
+                fontSize={12}
+                label={{ value: 'Day of Month', position: 'insideBottom', offset: -5 }}
+              />
+              <YAxis 
+                fontSize={12}
+                label={{ value: 'Amount (₹)', angle: -90, position: 'insideLeft' }}
+              />
+              <Tooltip 
+                formatter={(value: number) => [`₹${value.toFixed(2)}`, '']}
+                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
+              />
+              <Legend 
+                wrapperStyle={{ paddingTop: '10px' }}
+                iconType="line"
+              />
+              {getMonthLabels().map((label, idx) => (
+                <Line
+                  key={label}
+                  type="monotone"
+                  dataKey={label}
+                  stroke={monthColors[idx % monthColors.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  name={label}
+                  connectNulls
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </CardContent>

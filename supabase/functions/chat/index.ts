@@ -1,185 +1,130 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Database } from 'lucide-react';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.75.0';
 
-// AI chat hook integrated with your Supabase + Lovable finance API
-const useFinanceChat = () => {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content:
-        'Hello! I am your finance assistant. I can help you with budgets, expenses, savings, and investments.',
-      sources: null,
-    },
-  ]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const sendMessage = async (question) => {
-    if (!question.trim()) return;
-
-    const userMessage = { role: 'user', content: question };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      const LOVABLE_API_KEY = import.meta.env.VITE_LOVABLE_API_KEY;
-      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      // Example: get user token from local storage or cookie
-      const authToken = localStorage.getItem('supabase-auth-token');
-
-      const response = await fetch('/api/finance-chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: authToken || '',
-        },
-        body: JSON.stringify({
-          messages: [userMessage],
-          type: 'budget_analysis', // optional for special tools
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to fetch AI response');
-
-      const data = await response.json();
-      const assistantMessage = {
-        role: 'assistant',
-        content: data.message,
-        sources: data.sources || null, // optional for data sources
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: `Error: ${error.message}`, sources: null },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return { messages, isLoading, sendMessage };
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-export default function AIChat() {
-  const [input, setInput] = useState('');
-  const { messages, isLoading, sendMessage } = useFinanceChat();
-  const messagesEndRef = useRef(null);
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSubmit = () => {
-    if (!input.trim() || isLoading) return;
-    sendMessage(input);
-    setInput('');
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
-  };
 
-  return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto bg-gradient-to-br from-slate-900 to-slate-800">
-      {/* Header */}
-      <div className="bg-slate-800 border-b border-slate-700 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <Database className="w-6 h-6 text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">AI Finance Assistant</h1>
-            <p className="text-sm text-slate-400">Ask questions about your finances</p>
-          </div>
-        </div>
-      </div>
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                message.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-700 text-slate-100'
-              }`}
-            >
-              <p className="text-sm leading-relaxed">{message.content}</p>
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-              {message.sources && (
-                <div className="mt-3 pt-3 border-t border-slate-600">
-                  <p className="text-xs text-slate-400 mb-2">Data sources:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {message.sources.map((source, idx) => (
-                      <span key={idx} className="text-xs bg-slate-600 px-2 py-1 rounded">
-                        {source.table}: {source.count} records
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+    const { message } = await req.json();
 
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-slate-700 rounded-2xl px-4 py-3">
-              <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-            </div>
-          </div>
-        )}
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
 
-        <div ref={messagesEndRef} />
-      </div>
+    const { data: recentTransactions } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('transaction_date', { ascending: false })
+      .limit(10);
 
-      {/* Input */}
-      <div className="bg-slate-800 border-t border-slate-700 px-6 py-4">
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask about your finances..."
-            disabled={isLoading}
-            className="flex-1 bg-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-400 disabled:opacity-50"
-          />
-          <button
-            onClick={handleSubmit}
-            disabled={isLoading || !input.trim()}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-xl px-6 py-3 flex items-center gap-2 transition-colors"
-          >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <Send className="w-5 h-5" />
-                <span className="hidden sm:inline">Send</span>
-              </>
-            )}
-          </button>
-        </div>
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const { data: currentBudgets } = await supabase
+      .from('budgets')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('month', currentMonth);
 
-        <p className="text-xs text-slate-500 mt-2 text-center">
-          AI responses are based on your financial data
-        </p>
-      </div>
-    </div>
-  );
-}
+    const systemPrompt = `You are a proactive financial advisor helping users save money and make smart spending decisions.
 
+USER CONTEXT:
+- Name: ${profile?.full_name || 'User'}
+- Monthly Income: ₹${profile?.monthly_income || 'Not set'}
+- Savings Goal: ₹${profile?.savings_goal || 'Not set'}
+- Dietary Restrictions: ${profile?.dietary_restrictions?.join(', ') || 'None'}
+
+RECENT SPENDING:
+${recentTransactions?.map(t => `- ${t.category}: ₹${t.amount} at ${t.vendor || 'unknown'}`).join('\n') || 'No recent transactions'}
+
+CURRENT MONTH BUDGETS:
+${currentBudgets?.map(b => `- ${b.category}: ₹${b.spent_amount} / ₹${b.allocated_amount}`).join('\n') || 'No budgets set'}
+
+PRICE COMPARISON DATA (Mock):
+Groceries:
+- BigBasket: ₹850/week (delivery: ₹40, time: 2hrs)
+- Amazon Fresh: ₹920/week (delivery: free, time: 1hr)
+- Local Store: ₹780/week (delivery: none, time: 15min walk)
+
+Dining:
+- Zomato: ₹350/meal (delivery: ₹30, time: 30min)
+- Swiggy: ₹380/meal (delivery: ₹25, time: 25min)
+- Cooking at home: ₹120/meal (time: 45min)
+
+Transportation:
+- Uber: ₹15/km
+- Ola: ₹13/km
+- Public transport: ₹5/km
+
+Provide personalized advice based on their budget, spending patterns, and preferences. Be conversational, helpful, and focus on actionable savings opportunities.`;
+
+    const aiResponse = await fetch('https://api.lovable.app/v1/ai-gateway/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${lovableApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message },
+        ],
+      }),
+    });
+
+    if (!aiResponse.ok) {
+      throw new Error('AI Gateway request failed');
+    }
+
+    const aiData = await aiResponse.json();
+    const assistantMessage = aiData.choices[0]?.message?.content || 'I apologize, I could not generate a response.';
+
+    await supabase.from('chat_messages').insert([
+      { user_id: user.id, role: 'user', content: message },
+      { user_id: user.id, role: 'assistant', content: assistantMessage },
+    ]);
+
+    return new Response(JSON.stringify({ message: assistantMessage }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    console.error('Chat error:', error);
+    return new Response(JSON.stringify({ error: 'Service temporarily unavailable. Please try again.' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
